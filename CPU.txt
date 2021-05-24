@@ -1,0 +1,57 @@
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+	
+//////////////////////////////////////////////////////////////////////////
+	PARTS:
+	Mux16(a=instruction,b=ALUout,sel=instruction[15],out=Ain);
+
+   	//For the A-register
+	Not(in=instruction[15],out=Ninstruction);
+    	Or(a=Ninstruction,b=instruction[5],out=loadA);//d1
+    	ARegister(in=Ain,load=Aload,out=Aout,out[0..14]=addressM);
+	
+	//Set ALU's y input to A or M = RAM[A]
+    	Mux16(a=Aout,b=inM,sel=instruction[12],out=AMout);
+
+    	//For the ALU, return to D if it's not an instruction
+    	And(a=instruction[11],b=instruction[15],out=zx);
+    	And(a=instruction[10],b=instruction[15],out=nx);
+    	Or(a=instruction[9],b=Ninstruction,out=zy);
+    	Or(a=instruction[8],b=Ninstruction,out=ny);
+    	And(a=instruction[7],b=instruction[15],out=f);
+    	And(a=instruction[6],b=instruction[15],out=no);
+
+	//For the ALU
+    	ALU(x=Dout,y=AMout,zx=zx,nx=nx,zy=zy,ny=ny,f=f,no=no,out=outM,out=ALUout,zr=zero,ng=neg);
+
+    	//For writeM
+    	And(a=instruction[15],b=instruction[3],out=writeM);
+
+    	//For the D-register
+	And(a=instruction[15],b=instruction[4],out=loadD);
+    	DRegister(in=ALUout,load=loadD,out=Dout);
+
+
+   	Or(a=zero,b=neg,out=npos);
+    	Not(in=npos,out=pos);
+
+    	And(a=instruction[0],b=pos,out=pjump);//Jump if positive
+    	And(a=instruction[1],b=zero,out=zrjump);//Jump if zero
+   	And(a=instruction[2],b=neg,out=njump);//Jump if negative
+
+    	Or(a=pjump,b=zrjump,out=j1);
+    	Or(a=j1,b=njump,out=jump);
+    	And(a=jump,b=instruction[15],out=PCload);
+	PC(in=Aout,load=PCload,reset=reset,inc=true,out[0..14]=pc);
+}
